@@ -1,0 +1,121 @@
+{
+  "qdrant_url": "http://localhost:6333",
+  "ollama_url": "http://localhost:11434",
+  "embed_model": "nomic-embed-text:latest",
+  "default_collection": "developer_ai",
+  "vector_size": 768,
+  "collections": [
+    {
+      "name": "ai",
+      "description": "",
+      "vectors": 30226
+    },
+    {
+      "name": "developer_ai",
+      "description": "Main codebase — semua project & workspace",
+      "vectors": 103975
+    },
+    {
+      "name": "jualan",
+      "description": "",
+      "vectors": 92
+    },
+    {
+      "name": "koleks-illustrasi-modern",
+      "description": "",
+      "vectors": 10
+    },
+    {
+      "name": "nextjs_docs",
+      "description": "",
+      "vectors": 206
+    },
+    {
+      "name": "pg",
+      "description": "",
+      "vectors": 2
+    },
+    {
+      "name": "scrape_ufc_schedule",
+      "description": "",
+      "vectors": 8
+    },
+    {
+      "name": "test coba",
+      "description": "",
+      "vectors": 1
+    },
+    {
+      "name": "third-party",
+      "description": "",
+      "vectors": 20
+    }
+  ],
+  "workspace_paths": {
+    "bri": {
+      "path": "/Users/a2364/Documents/bri/codes",
+      "collection": "developer_ai",
+      "last_indexed": "2026-08-10T00:00:00.000Z"
+    },
+    "ilham-belajar": {
+      "path": "/Users/a2364/Documents/ilham/belajar",
+      "collection": "developer_ai",
+      "last_indexed": "2026-08-10T00:00:00.000Z"
+    },
+    "mines": {
+      "path": "/Users/a2364/Documents/ilham/mines",
+      "collection": "developer_ai",
+      "last_indexed": "2026-08-10T00:00:00.000Z"
+    },
+    "ai": {
+      "path": "/Users/a2364/Documents/ilham/ai",
+      "collection": "developer_ai",
+      "last_indexed": "2026-08-10T10:52:02.719Z"
+    },
+    "thirdparty": {
+      "path": "/Users/a2364/Documents/ilham/thirdparty",
+      "collection": "developer_ai",
+      "last_indexed": "2026-08-10T00:00:00.000Z"
+    },
+    "iam-proxy": {
+      "path": "/Users/a2364/Documents/ilham/third-party",
+      "collection": "developer_ai",
+      "last_indexed": "2026-08-10T00:00:00.000Z"
+    },
+    "testimoni qdrant": {
+      "path": "/Users/a2364/Documents/ilham/coba/rag_test",
+      "collection": "test",
+      "last_indexed": "2026-08-10T10:55:12.175Z"
+    },
+    "coba": {
+      "path": "/Users/a2364/Documents/ilham/coba",
+      "collection": "developer_ai",
+      "last_indexed": "2026-08-10T11:45:52.796Z"
+    },
+    "test-rag": {
+      "path": "/Users/a2364/Documents/ilham/coba/rag_test",
+      "collection": "test",
+      "last_indexed": "2026-08-10T11:43:04.414Z"
+    },
+    "testi": {
+      "path": "/Users/a2364/Documents/ilham/coba/rag_test",
+      "collection": "test coba ",
+      "last_indexed": "2026-08-10T12:14:38.617Z"
+    },
+    "test": {
+      "path": "/Users/a2364/Documents/ilham/coba",
+      "collection": "test coba",
+      "last_indexed": "2026-08-10T12:37:34.447Z"
+    },
+    "test ": {
+      "path": "/Users/a2364/Documents/ilham/coba",
+      "collection": "test coba",
+      "last_indexed": "2026-08-11T00:24:14.988Z"
+    },
+    "folder coba ": {
+      "path": "/Users/a2364/Documents/ilham/coba",
+      "collection": "test coba",
+      "last_indexed": "2026-08-11T00:25:14.115Z"
+    }
+  }
+}
