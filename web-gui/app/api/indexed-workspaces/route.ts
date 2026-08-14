@@ -1,23 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readConfig, writeConfig } from "@/lib/config-helper";
 
 /**
  * Get indexed workspaces from Qdrant by scrolling points and aggregating
  * unique workspace/project combinations with their counts.
  *
- * Uses Qdrant's scroll API with payload filtering to get distinct workspaces.
+ * Also auto-syncs workspace_paths in config with correct collection mapping.
  */
 export async function GET(req: NextRequest) {
   const qdrantUrl = req.nextUrl.searchParams.get("url") || "http://localhost:6333";
-  const collection = req.nextUrl.searchParams.get("collection") || "developer_ai";
+  const collection = req.nextUrl.searchParams.get("collection") || "CODES";
 
   try {
-    // Use Qdrant's scroll with grouping - get a sample of points to extract workspaces
-    // We'll scroll through points and aggregate workspace/project combos
     const workspaces = new Map<string, { workspace: string; projects: Map<string, number>; totalChunks: number }>();
 
     let offset: string | number | null = null;
     let iterations = 0;
-    const maxIterations = 50; // Safety cap — each scroll gets 100 points
+    const maxIterations = 50;
 
     while (iterations < maxIterations) {
       const body: Record<string, unknown> = {
@@ -70,6 +69,38 @@ export async function GET(req: NextRequest) {
           .sort((a, b) => b.chunks - a.chunks),
       }))
       .sort((a, b) => b.totalChunks - a.totalChunks);
+
+    // Auto-sync: ensure workspace_paths in config has correct collection mapping
+    try {
+      const appConfig = readConfig();
+      if (!appConfig.workspace_paths) appConfig.workspace_paths = {};
+      let configChanged = false;
+
+      for (const ws of result) {
+        const wsKey = ws.workspace.toLowerCase();
+        if (appConfig.workspace_paths[wsKey]) {
+          // Update collection if different
+          if (appConfig.workspace_paths[wsKey].collection !== collection) {
+            appConfig.workspace_paths[wsKey].collection = collection;
+            configChanged = true;
+          }
+        } else {
+          // Workspace exists in Qdrant but not in config — add stub entry
+          appConfig.workspace_paths[wsKey] = {
+            path: "",
+            collection,
+            last_indexed: new Date().toISOString(),
+          };
+          configChanged = true;
+        }
+      }
+
+      if (configChanged) {
+        writeConfig(appConfig);
+      }
+    } catch {
+      // Non-critical — config sync failure shouldn't break the response
+    }
 
     return NextResponse.json({ success: true, workspaces: result, collection });
   } catch (err) {

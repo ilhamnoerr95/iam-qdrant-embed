@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Semantic search tool for Qdrant using Ollama embedding.
+Hybrid search tool for Qdrant: Dense vector + Sparse BM25 + RRF fusion.
 Reads settings from qdrant_config.json (same directory as this script).
 
 Usage:
@@ -9,15 +9,17 @@ Usage:
     python qdrant_search.py "query" --workspace bri
     python qdrant_search.py "query" --ext .tsx
     python qdrant_search.py "query" --limit 10
-    python qdrant_search.py "query" --collection developer_ai
+    python qdrant_search.py "query" --collection coba
 """
 
 import argparse
 import json
 import os
 import sys
+import re
+import hashlib
 import urllib.request
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 from pathlib import Path
 
 # ─── Config Loading ────────────────────────────────────────────────────────────
@@ -28,12 +30,11 @@ CONFIG_PATH = Path(__file__).parent / "qdrant_config.json"
 def load_config() -> dict:
     """Load configuration from qdrant_config.json."""
     if not CONFIG_PATH.exists():
-        # Fallback defaults if config doesn't exist
         return {
             "qdrant_url": "http://localhost:6333",
             "ollama_url": "http://localhost:11434",
             "embed_model": "nomic-embed-text:latest",
-            "default_collection": "developer_ai",
+            "default_collection": "coba",
             "vector_size": 768,
             "collections": [],
         }
@@ -49,11 +50,81 @@ COLLECTION = config["default_collection"]
 MODEL = config["embed_model"]
 
 
+# ─── BM25 Sparse Vector (same logic as embedding-engine.ts) ───────────────────
+
+STOP_WORDS = {
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "shall", "can", "need", "dare", "ought",
+    "used", "to", "of", "in", "for", "on", "with", "at", "by", "from",
+    "as", "into", "through", "during", "before", "after", "above", "below",
+    "between", "out", "off", "over", "under", "again", "further", "then",
+    "once", "here", "there", "when", "where", "why", "how", "all", "each",
+    "every", "both", "few", "more", "most", "other", "some", "such", "no",
+    "nor", "not", "only", "own", "same", "so", "than", "too", "very",
+    "just", "because", "but", "and", "or", "if", "this", "that", "it",
+    "its", "i", "me", "my", "we", "our", "you", "your", "he", "him",
+    "his", "she", "her", "they", "them", "their", "what", "which", "who",
+    "whom", "these", "those", "am", "up", "about",
+}
+
+
+def tokenize(text: str) -> List[str]:
+    """Tokenize text: lowercase, split camelCase/snake_case, filter stops."""
+    text = text.lower()
+    # Split camelCase
+    text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+    # Split on non-word chars
+    tokens = re.split(r'[^a-z0-9]+', text)
+    return [t for t in tokens if len(t) > 1 and len(t) < 40 and t not in STOP_WORDS]
+
+
+def token_to_index(token: str) -> int:
+    """Hash token to index (same algorithm as TypeScript version)."""
+    h = 0
+    for ch in token:
+        h = ((h << 5) - h + ord(ch)) & 0xFFFFFFFF
+        if h >= 0x80000000:
+            h -= 0x100000000
+    return abs(h) % (1 << 30)
+
+
+def generate_sparse_vector(text: str) -> Dict:
+    """Generate BM25-style sparse vector from text."""
+    tokens = tokenize(text)
+    if not tokens:
+        return {"indices": [], "values": []}
+
+    # Count term frequencies
+    tf = {}
+    for token in tokens:
+        tf[token] = tf.get(token, 0) + 1
+
+    # Convert to sparse vector
+    index_value_pairs = []
+    for token, count in tf.items():
+        idx = token_to_index(token)
+        # BM25 TF saturation: tf / (tf + k1), k1=1.2
+        tf_score = count / (count + 1.2)
+        index_value_pairs.append((idx, tf_score))
+
+    # Deduplicate and sort by index
+    deduped = {}
+    for idx, val in index_value_pairs:
+        deduped[idx] = deduped.get(idx, 0) + val
+
+    sorted_pairs = sorted(deduped.items())
+    return {
+        "indices": [idx for idx, _ in sorted_pairs],
+        "values": [val for _, val in sorted_pairs],
+    }
+
+
 # ─── Core Functions ────────────────────────────────────────────────────────────
 
 
 def get_embedding(text: str) -> List[float]:
-    """Generate embedding via Ollama."""
+    """Generate dense embedding via Ollama."""
     payload = json.dumps({"model": MODEL, "prompt": text}).encode()
     req = urllib.request.Request(OLLAMA_URL, data=payload, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req) as resp:
@@ -61,10 +132,66 @@ def get_embedding(text: str) -> List[float]:
     return data["embedding"]
 
 
-def search_qdrant(vector: List[float], limit: int = 5, filters: Optional[Dict] = None) -> list:
-    """Query Qdrant with vector and optional filters."""
+def hybrid_search(query: str, limit: int = 5, filters: Optional[Dict] = None) -> list:
+    """
+    Hybrid search using Qdrant's prefetch + RRF fusion.
+    
+    Strategy:
+    1. Prefetch top candidates from dense vector (semantic similarity)
+    2. Prefetch top candidates from sparse vector (keyword/BM25 matching)
+    3. Fuse results using Reciprocal Rank Fusion (RRF)
+    """
+    # Generate both vectors for the query
+    dense_vector = get_embedding(query)
+    sparse_vector = generate_sparse_vector(query)
+
+    # Qdrant Query API with prefetch + RRF fusion
+    # Each prefetch retrieves candidates, then fusion combines them
+    prefetch_limit = limit * 5  # Get more candidates for better fusion
+
+    body = {
+        "prefetch": [
+            {
+                "query": dense_vector,
+                "using": "dense",
+                "limit": prefetch_limit,
+            },
+            {
+                "query": sparse_vector,
+                "using": "sparse",
+                "limit": prefetch_limit,
+            },
+        ],
+        "query": {"fusion": "rrf"},
+        "limit": limit,
+        "with_payload": True,
+        "with_vector": False,
+    }
+
+    if filters:
+        body["filter"] = filters
+
+    payload = json.dumps(body).encode()
+    url = f"{QDRANT_URL}/collections/{COLLECTION}/points/query"
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+
+    try:
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read())
+        return data.get("result", {}).get("points", [])
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode() if e.fp else ""
+        print(f"⚠️  Hybrid search failed ({e.code}): {error_body[:200]}", file=sys.stderr)
+        # Fallback to dense-only search
+        print("   Falling back to dense-only search...", file=sys.stderr)
+        return dense_only_search(dense_vector, limit, filters)
+
+
+def dense_only_search(vector: List[float], limit: int = 5, filters: Optional[Dict] = None) -> list:
+    """Fallback: dense vector only search (for collections without sparse vectors)."""
     body = {
         "query": vector,
+        "using": "dense",
         "limit": limit,
         "with_payload": True,
         "with_vector": False,
@@ -100,7 +227,7 @@ def print_results(points: list, show_content: bool = True):
         print("❌ Tidak ada hasil ditemukan.")
         return
 
-    print(f"\n🔍 Ditemukan {len(points)} hasil:\n")
+    print(f"\n🔍 Ditemukan {len(points)} hasil (hybrid: dense + sparse BM25 → RRF):\n")
     print("=" * 80)
 
     for i, point in enumerate(points, 1):
@@ -128,7 +255,7 @@ def print_results(points: list, show_content: bool = True):
 def main():
     global COLLECTION
 
-    parser = argparse.ArgumentParser(description="Semantic search Qdrant via Ollama embedding")
+    parser = argparse.ArgumentParser(description="Hybrid search Qdrant (Dense + Sparse BM25 + RRF fusion)")
     parser.add_argument("query", help="Search query text")
     parser.add_argument("--project", "-p", help="Filter by project name")
     parser.add_argument("--workspace", "-w", help="Filter by workspace name")
@@ -136,21 +263,27 @@ def main():
     parser.add_argument("--limit", "-l", type=int, default=5, help="Number of results (default: 5)")
     parser.add_argument("--collection", "-c", help=f"Qdrant collection name (default: {COLLECTION})")
     parser.add_argument("--no-content", action="store_true", help="Hide content preview")
+    parser.add_argument("--dense-only", action="store_true", help="Use dense vector only (no hybrid)")
 
     args = parser.parse_args()
 
-    # Override collection if specified via flag
     if args.collection:
         COLLECTION = args.collection
 
-    print(f"🧠 Generating embedding for: \"{args.query}\"")
-    vector = get_embedding(args.query)
+    print(f"🧠 Generating embeddings for: \"{args.query}\"")
 
     filters = build_filter(project=args.project, workspace=args.workspace, ext=args.ext)
     if filters:
         print(f"🔎 Filters: {json.dumps(filters, indent=2)}")
 
-    points = search_qdrant(vector, limit=args.limit, filters=filters)
+    if args.dense_only:
+        print("📡 Mode: Dense only (semantic)")
+        vector = get_embedding(args.query)
+        points = dense_only_search(vector, limit=args.limit, filters=filters)
+    else:
+        print("📡 Mode: Hybrid (dense + sparse BM25 → RRF fusion)")
+        points = hybrid_search(args.query, limit=args.limit, filters=filters)
+
     print_results(points, show_content=not args.no_content)
 
 

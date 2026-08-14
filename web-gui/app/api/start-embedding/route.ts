@@ -14,7 +14,9 @@ export async function POST(req: NextRequest) {
     try {
       const appConfig = readConfig();
       if (!appConfig.workspace_paths) appConfig.workspace_paths = {};
-      appConfig.workspace_paths[config.workspace] = {
+      // Normalize workspace key to lowercase for consistent lookup
+      const wsKey = config.workspace.toLowerCase();
+      appConfig.workspace_paths[wsKey] = {
         path: config.folderPath,
         collection: config.collectionName,
         last_indexed: new Date().toISOString(),
@@ -26,7 +28,7 @@ export async function POST(req: NextRequest) {
   }
 
   // If creating new collection, save to config immediately
-  if (config.createNew && config.collectionName) {
+  if (config.collectionName) {
     addCollectionToConfig(config.collectionName);
   }
 

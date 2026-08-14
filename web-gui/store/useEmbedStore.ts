@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { SourceType } from "@/lib/embedding-engine";
 
 export type ConnectionStatus = "idle" | "connected" | "failed" | "testing";
 
@@ -65,10 +66,10 @@ type EmbedStore = {
 
   // Folder
   folderPath: string;
-  extensions: string[];
+  sourceType: SourceType;
   includeSubfolders: boolean;
   setFolderPath: (path: string) => void;
-  setExtensions: (ext: string[]) => void;
+  setSourceType: (type: SourceType) => void;
   setIncludeSubfolders: (include: boolean) => void;
 
   // Scan stats
@@ -83,6 +84,10 @@ type EmbedStore = {
   setProgress: (progress: ProgressState) => void;
   setIsRunning: (running: boolean) => void;
   resetProgress: () => void;
+
+  // Refresh trigger — increment to force IndexedWorkspaces reload
+  refreshTrigger: number;
+  triggerRefresh: () => void;
 };
 
 const initialProgress: ProgressState = {
@@ -139,10 +144,10 @@ export const useEmbedStore = create<EmbedStore>((set) => ({
 
   // Folder
   folderPath: "",
-  extensions: [".txt", ".md", ".py", ".ts", ".tsx", ".js", ".jsx", ".java", ".go", ".rs"],
+  sourceType: "workspace",
   includeSubfolders: true,
   setFolderPath: (path) => set({ folderPath: path }),
-  setExtensions: (ext) => set({ extensions: ext }),
+  setSourceType: (type) => set({ sourceType: type }),
   setIncludeSubfolders: (include) => set({ includeSubfolders: include }),
 
   // Scan stats
@@ -157,4 +162,8 @@ export const useEmbedStore = create<EmbedStore>((set) => ({
   setProgress: (progress) => set({ progress }),
   setIsRunning: (running) => set({ isRunning: running }),
   resetProgress: () => set({ progress: initialProgress, isRunning: false }),
+
+  // Refresh trigger
+  refreshTrigger: 0,
+  triggerRefresh: () => set((state) => ({ refreshTrigger: state.refreshTrigger + 1 })),
 }));

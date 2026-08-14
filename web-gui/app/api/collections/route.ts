@@ -2,14 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { addCollectionToConfig, removeCollectionFromConfig, syncCollectionsToConfig } from "@/lib/config-helper";
 
 // GET — list collections (also syncs to config)
+// Excludes web-scrape collections (source_type: web-scrape) from UI display
+const HIDDEN_COLLECTIONS = ["web"];
+
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url") || "http://localhost:6333";
   try {
     const collections = await syncCollectionsToConfig(url);
+    // Filter out hidden collections (web-scrape type)
+    const visible = collections.filter((c) => !HIDDEN_COLLECTIONS.includes(c.name));
     return NextResponse.json({
       success: true,
-      collections: collections.map((c) => c.name),
-      details: collections,
+      collections: visible.map((c) => c.name),
+      details: visible,
     });
   } catch (err) {
     return NextResponse.json(

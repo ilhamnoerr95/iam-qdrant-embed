@@ -7,7 +7,6 @@ import ConnectionCard from "@/components/molecule/ConnectionCard";
 import EmbeddingSettings from "@/components/molecule/EmbeddingSettings";
 import CollectionSelector from "@/components/molecule/CollectionSelector";
 import FolderPicker from "@/components/molecule/FolderPicker";
-import ProgressSection from "@/components/molecule/ProgressSection";
 import IndexedWorkspaces from "@/components/molecule/IndexedWorkspaces";
 import ToastContainer from "@/components/atom/Toast";
 import { showToast } from "@/components/atom/Toast";
@@ -134,19 +133,18 @@ export default function Home() {
         </div>
 
         {/* Settings Row */}
-        <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <EmbeddingSettings />
           <CollectionSelector onRefresh={loadCollections} />
+        </div>
+
+        {/* Folder & Indexing */}
+        <div className="mb-4">
           <FolderPicker />
         </div>
 
         {/* Indexed Workspaces */}
         <IndexedWorkspaces />
-
-        {/* Progress */}
-        <div className="mb-4">
-          <ProgressSection />
-        </div>
 
         {/* Tips */}
         <div className="rounded-xl border border-border-default bg-bg-card px-5 py-3.5 text-xs text-text-secondary">

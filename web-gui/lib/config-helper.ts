@@ -46,11 +46,9 @@ export function writeConfig(config: QdrantConfig): void {
 
 /**
  * Sync collections list in config with actual Qdrant collections.
- * Adds new ones, removes deleted ones.
+ * Only updates the collections array — does NOT touch workspace_paths.
  */
 export async function syncCollectionsToConfig(qdrantUrl: string): Promise<CollectionInfo[]> {
-  const config = readConfig();
-
   // Fetch actual collections from Qdrant with their point counts
   const resp = await fetch(`${qdrantUrl}/collections`, { signal: AbortSignal.timeout(5000) });
   if (!resp.ok) throw new Error(`Qdrant HTTP ${resp.status}`);
@@ -65,19 +63,14 @@ export async function syncCollectionsToConfig(qdrantUrl: string): Promise<Collec
       const infoData = await infoResp.json();
       const vectors = infoData.result?.points_count || 0;
 
-      // Preserve existing description if available
-      const existing = config.collections.find((c) => c.name === name);
-      updatedCollections.push({
-        name,
-        description: existing?.description || "",
-        vectors,
-      });
+      updatedCollections.push({ name, description: "", vectors });
     } catch {
       updatedCollections.push({ name, description: "", vectors: 0 });
     }
   }
 
-  // Save to config
+  // Re-read config right before writing to avoid race conditions
+  const config = readConfig();
   config.collections = updatedCollections;
   writeConfig(config);
 
@@ -98,15 +91,10 @@ export function addCollectionToConfig(name: string, description?: string): void 
 
 /**
  * Remove a collection from config after deletion.
+ * Does NOT remove workspace_paths — user may re-create the collection later.
  */
 export function removeCollectionFromConfig(name: string): void {
   const config = readConfig();
   config.collections = config.collections.filter((c) => c.name !== name);
-  // Also clean up workspace_paths that reference this collection
-  for (const [ws, info] of Object.entries(config.workspace_paths)) {
-    if (info.collection === name) {
-      delete config.workspace_paths[ws];
-    }
-  }
   writeConfig(config);
 }
