@@ -268,33 +268,64 @@ Config **otomatis update** saat:
 
 ## 📦 Payload Structure
 
-Setiap chunk yang disimpan di Qdrant:
+Setiap chunk yang disimpan di Qdrant (v2.0):
 
 ```json
 {
-  "source": {
-    "workspace": "bri",
-    "project": "qcash-ui",
-    "relative_path": "qcash-ui/src/hooks/useWizard.ts",
-    "extension": ".ts"
+  "vector": {
+    "dense": [0.123, 0.456, ...],
+    "sparse": { "indices": [42, 1337, 9001], "values": [0.45, 0.83, 0.31] }
   },
-  "chunk": {
-    "index": 0,
-    "hash": "a1b2c3d4e5f6...",
-    "modified": 1723456789.0,
-    "start_line": 1,
-    "end_line": 50
-  },
-  "content": "import { useState } from 'react';\n\nexport function useWizard...",
-  "symbols": ["useWizard", "WizardStep", "nextStep"],
-  "metadata": {
-    "indexed_at": 1723456789,
-    "indexer_version": "1.0.0",
-    "chunk_size": 500,
-    "embed_model": "nomic-embed-text:latest"
+  "payload": {
+    "source": {
+      "workspace": "bri",
+      "project": "qcash-ui",
+      "relative_path": "qcash-ui/src/hooks/useWizard.ts",
+      "extension": ".ts",
+      "source_type": "workspace",
+      "content_type": "code"
+    },
+    "chunk": {
+      "index": 0,
+      "hash": "a1b2c3d4e5f6...",
+      "modified": 1723456789.0,
+      "start_line": 1,
+      "end_line": 50
+    },
+    "content": "import { useState } from 'react';\n\nexport function useWizard...",
+    "symbols": ["useWizard", "WizardStep", "nextStep"],
+    "metadata": {
+      "indexed_at": 1723456789,
+      "indexer_version": "2.0.0",
+      "chunk_size": 500,
+      "embed_model": "nomic-embed-text:latest"
+    }
   }
 }
 ```
+
+### Vector Types
+
+| Vector | Tipe | Fungsi |
+|--------|------|--------|
+| `dense` | 768-dim float array | Semantic similarity (via Ollama nomic-embed-text) |
+| `sparse` | BM25 indices + values | Keyword/exact match (TF-IDF style) |
+
+### Search Strategy: Hybrid + RRF
+
+```
+Query "react form validation"
+  ├── Dense vector (semantic: "form handling", "input validation")
+  ├── Sparse vector (keywords: "react", "form", "validation")
+  └── RRF Fusion → combined ranking (best of both worlds)
+```
+
+### Source Types
+
+| source_type | content_type | Extensions |
+|-------------|--------------|------------|
+| `workspace` | `code` | .ts, .tsx, .js, .py, .go, .rs, .java, .css, .html, dll |
+| `documentation` | `documentation` | .md, .mdx, .txt, .rst, .adoc, dll |
 
 ### Symbol Extraction
 
@@ -335,15 +366,21 @@ Otomatis extract nama function/class dari:
 - ✅ Auto-connect Qdrant & Ollama on load
 - ✅ Auto-detect embedding vs chat models
 - ✅ Auto-set vector dimension dari model
-- ✅ Browse folder via file explorer modal
-- ✅ Extension filter (tag-based)
+- ✅ Browse folder via file explorer modal (+ indexed indicator)
+- ✅ Auto-detect source_type (code vs documentation)
 - ✅ File stats (total files, size, estimated chunks)
 - ✅ Background embedding dengan progress real-time
+- ✅ Real-time indexing logs (terminal-style viewer)
 - ✅ Re-index workspace 1-click (path tersimpan)
+- ✅ Delete workspace & delete per project
+- ✅ Tambah project per workspace
 - ✅ Collection CRUD (auto-sync ke config)
 - ✅ Toast notification (success/error/warning)
 - ✅ Retry logic embedding (3x exponential backoff)
 - ✅ Line-aware chunking + symbol extraction
+- ✅ Hybrid vectors: Dense (semantic) + Sparse BM25 (keyword)
+- ✅ Hybrid search: prefetch + RRF fusion
+- ✅ Multi-collection scan (workspace bisa di beberapa collection)
 
 ---
 
@@ -463,4 +500,4 @@ Atau gunakan Web GUI di: `http://localhost:5001`
 
 Created by **ilhamnrachman** | MIT License
 
-*Last updated: 11 Agustus 2026*
+*Last updated: 14 Agustus 2026 — v2.0.0*

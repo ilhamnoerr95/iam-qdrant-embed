@@ -12,7 +12,7 @@ import { readFileSync, readdirSync, statSync } from "fs";
 import { join, extname, relative, basename } from "path";
 import crypto from "crypto";
 
-const INDEXER_VERSION = "1.0.0";
+const INDEXER_VERSION = "2.0.0";
 
 export type EmbeddingProgress = {
   percent: number;

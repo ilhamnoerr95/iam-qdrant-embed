@@ -6,24 +6,24 @@
   "vector_size": 768,
   "collections": [
     {
+      "name": "belajar",
+      "description": "",
+      "vectors": 0
+    },
+    {
       "name": "coba",
       "description": "",
-      "vectors": 517
+      "vectors": 0
     },
     {
       "name": "thirdparty",
       "description": "",
-      "vectors": 177
+      "vectors": 0
     },
     {
       "name": "web",
       "description": "",
       "vectors": 1357
-    },
-    {
-      "name": "belajar",
-      "description": "",
-      "vectors": 0
     }
   ],
   "workspace_paths": {
