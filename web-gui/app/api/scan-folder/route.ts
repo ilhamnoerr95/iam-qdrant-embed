@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { statSync } from "fs";
-import { scanFiles, getExtensionsForSourceType } from "@/lib/embedding-engine";
-import type { SourceType } from "@/lib/embedding-engine";
+import { scanFiles, getAllExtensions } from "@/lib/embedding-engine";
 
 export async function POST(req: NextRequest) {
-  const { path, sourceType, includeSubfolders, chunkSize, autoDetect } = await req.json();
+  const { path, includeSubfolders, chunkSize } = await req.json();
 
   if (!path) {
     return NextResponse.json({
@@ -12,24 +11,13 @@ export async function POST(req: NextRequest) {
       totalFiles: 0,
       totalSize: 0,
       estimatedChunks: 0,
-      detectedSourceType: "workspace",
       message: "No path provided",
     });
   }
 
   try {
-    // Auto-detect source_type by scanning both and comparing counts
-    let detectedSourceType: SourceType = sourceType || "workspace";
-
-    if (autoDetect || !sourceType) {
-      const codeFiles = scanFiles(path, getExtensionsForSourceType("workspace"), includeSubfolders ?? true);
-      const docFiles = scanFiles(path, getExtensionsForSourceType("documentation"), includeSubfolders ?? true);
-      // If docs outnumber code files, it's documentation; otherwise workspace
-      detectedSourceType = docFiles.length > codeFiles.length ? "documentation" : "workspace";
-    }
-
-    const st: SourceType = detectedSourceType;
-    const extensions = getExtensionsForSourceType(st);
+    // Scan all supported files (code + docs combined)
+    const extensions = getAllExtensions();
     const files = scanFiles(path, extensions, includeSubfolders ?? true);
     let totalSize = 0;
     let estimatedChunks = 0;
@@ -50,7 +38,6 @@ export async function POST(req: NextRequest) {
       totalFiles: files.length,
       totalSize,
       estimatedChunks,
-      detectedSourceType,
     });
   } catch (err) {
     return NextResponse.json({
@@ -58,7 +45,6 @@ export async function POST(req: NextRequest) {
       totalFiles: 0,
       totalSize: 0,
       estimatedChunks: 0,
-      detectedSourceType: "workspace",
       message: err instanceof Error ? err.message : "Scan failed",
     });
   }

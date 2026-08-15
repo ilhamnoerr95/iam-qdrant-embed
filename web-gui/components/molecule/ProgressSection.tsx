@@ -29,7 +29,6 @@ export default function ProgressSection() {
       createNew: store.collectionMode === "new",
       vectorSize: store.vectorSize,
       folderPath: store.folderPath,
-      sourceType: store.sourceType,
       includeSubfolders: store.includeSubfolders,
       workspace: store.workspace,
       project: store.project,

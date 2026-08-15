@@ -25,10 +25,10 @@ function formatTime(ts: number): string {
 export default function FolderPicker() {
   const store = useEmbedStore();
   const {
-    folderPath, sourceType, includeSubfolders,
+    folderPath, includeSubfolders,
     totalFiles, totalSize, estimatedChunks, chunkSize,
     progress, isRunning,
-    setFolderPath, setSourceType, setIncludeSubfolders, setScanStats,
+    setFolderPath, setIncludeSubfolders, setScanStats,
     setProgress, setIsRunning,
   } = store;
 
@@ -48,7 +48,7 @@ export default function FolderPicker() {
       const resp = await fetch("/api/scan-folder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: folderPath, autoDetect: true, includeSubfolders, chunkSize }),
+        body: JSON.stringify({ path: folderPath, includeSubfolders, chunkSize }),
       });
       const data = await resp.json();
       if (data.success) {
@@ -57,12 +57,9 @@ export default function FolderPicker() {
           totalSize: data.totalSize,
           estimatedChunks: data.estimatedChunks,
         });
-        if (data.detectedSourceType) {
-          setSourceType(data.detectedSourceType);
-        }
       }
     } catch { /* ignore */ }
-  }, [folderPath, includeSubfolders, chunkSize, setScanStats, setSourceType]);
+  }, [folderPath, includeSubfolders, chunkSize, setScanStats]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -164,7 +161,6 @@ export default function FolderPicker() {
       createNew: store.collectionMode === "new",
       vectorSize: store.vectorSize,
       folderPath,
-      sourceType,
       includeSubfolders,
       workspace: store.workspace,
       project: store.project,
@@ -285,12 +281,8 @@ export default function FolderPicker() {
               <span className="text-xs"><span className="font-bold text-accent">{formatSize(totalSize)}</span></span>
               <span className="text-xs"><span className="font-bold text-accent">~{estimatedChunks}</span> <span className="text-text-muted">chunks</span></span>
             </div>
-            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${
-              sourceType === "workspace"
-                ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                : "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-            }`}>
-              {sourceType === "workspace" ? "💻 Code" : "📖 Docs"}
+            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium bg-accent/10 text-accent border border-accent/20">
+              💻 Code + 📖 Docs
             </span>
           </div>
         )}

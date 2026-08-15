@@ -233,7 +233,7 @@ function WorkspaceCard({
 
 export default function IndexedWorkspaces() {
   const store = useEmbedStore();
-  const { qdrantUrl, ollamaUrl, qdrantStatus, selectedCollection, collectionMode, newCollectionName, model, chunkSize, chunkOverlap, vectorSize, sourceType, includeSubfolders, refreshTrigger } = store;
+  const { qdrantUrl, ollamaUrl, qdrantStatus, selectedCollection, collectionMode, newCollectionName, model, chunkSize, chunkOverlap, vectorSize, includeSubfolders, refreshTrigger } = store;
 
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([]);
   const [workspacePaths, setWorkspacePaths] = useState<Record<string, WorkspacePathInfo>>({});
@@ -404,7 +404,6 @@ export default function IndexedWorkspaces() {
         createNew: false,
         vectorSize,
         folderPath: pathInfo.path,
-        sourceType,
         includeSubfolders,
         workspace: ws.workspace,
         project: pathInfo.path.replace(/\/+$/, "").split("/").pop() || ws.workspace,
@@ -537,7 +536,6 @@ export default function IndexedWorkspaces() {
           workspace: addProjectModal.workspace,
           projectPath: newProjectPath,
           projectName,
-          sourceType,
         }),
       });
       const data = await resp.json();
@@ -607,7 +605,6 @@ export default function IndexedWorkspaces() {
         createNew: false,
         vectorSize,
         folderPath: setPathValue,
-        sourceType,
         includeSubfolders,
         workspace: setPathModal.workspace,
         project: setPathValue.replace(/\/+$/, "").split("/").pop() || setPathModal.workspace,

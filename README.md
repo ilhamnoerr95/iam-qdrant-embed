@@ -186,6 +186,8 @@ Di section **📚 Indexed Workspaces**:
 python3 ~/Documents/qdrant/qdrant_search.py "query"
 ```
 
+> **Default**: search di SEMUA collections (hybrid: dense + sparse BM25 → RRF fusion)
+
 ### Options
 
 | Flag | Contoh | Fungsi |
@@ -194,13 +196,14 @@ python3 ~/Documents/qdrant/qdrant_search.py "query"
 | `--workspace, -w` | `--workspace bri` | Filter by workspace |
 | `--ext, -e` | `--ext .tsx` | Filter by extension |
 | `--limit, -l` | `--limit 10` | Jumlah hasil (default: 5) |
-| `--collection, -c` | `--collection nextjs_docs` | Override collection |
+| `--collection, -c` | `--collection nextjs_docs` | Search di collection spesifik saja |
 | `--no-content` | | Sembunyikan preview |
+| `--dense-only` | | Gunakan dense vector saja (tanpa BM25) |
 
 ### Contoh
 
 ```bash
-# Search umum
+# Search umum (multi-collection, hybrid)
 python3 ~/Documents/qdrant/qdrant_search.py "react hook form validation"
 
 # Filter workspace + extension
@@ -209,11 +212,14 @@ python3 ~/Documents/qdrant/qdrant_search.py "authentication middleware" --worksp
 # Filter project spesifik
 python3 ~/Documents/qdrant/qdrant_search.py "wizard step form" --project qcash-ui-registration-giro
 
-# Search di collection lain
+# Search di collection tertentu saja
 python3 ~/Documents/qdrant/qdrant_search.py "app router middleware" --collection nextjs_docs
 
 # Banyak hasil tanpa preview
 python3 ~/Documents/qdrant/qdrant_search.py "unit test" --limit 15 --no-content
+
+# Dense only (tanpa keyword matching)
+python3 ~/Documents/qdrant/qdrant_search.py "form handling" --dense-only
 ```
 
 ### Dari Kiro CLI
@@ -500,4 +506,4 @@ Atau gunakan Web GUI di: `http://localhost:5001`
 
 Created by **ilhamnrachman** | MIT License
 
-*Last updated: 14 Agustus 2026 — v2.0.0*
+*Last updated: 15 Agustus 2026 — v2.1.0*

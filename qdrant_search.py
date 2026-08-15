@@ -249,6 +249,45 @@ def print_results(points: list, show_content: bool = True):
         print("=" * 80)
 
 
+def get_all_collections() -> List[str]:
+    """Get all collection names from config (excluding web-scrape types)."""
+    HIDDEN = {"web"}
+    collections = config.get("collections", [])
+    return [c["name"] for c in collections if c["name"] not in HIDDEN]
+
+
+def multi_collection_search(query: str, limit: int = 5, filters: Optional[Dict] = None, dense_only: bool = False) -> list:
+    """Search across ALL collections and merge results by score."""
+    global COLLECTION
+    collections = get_all_collections()
+    if not collections:
+        collections = [COLLECTION]
+
+    all_points = []
+    original_coll = COLLECTION
+
+    for coll in collections:
+        COLLECTION = coll
+        try:
+            if dense_only:
+                vector = get_embedding(query)
+                points = dense_only_search(vector, limit=limit, filters=filters)
+            else:
+                points = hybrid_search(query, limit=limit, filters=filters)
+            # Tag each point with its collection
+            for p in points:
+                p["_collection"] = coll
+            all_points.extend(points)
+        except Exception:
+            pass  # Skip collections that error
+
+    COLLECTION = original_coll
+
+    # Sort by score descending, take top N
+    all_points.sort(key=lambda p: p.get("score", 0), reverse=True)
+    return all_points[:limit]
+
+
 # ─── Main ──────────────────────────────────────────────────────────────────────
 
 
@@ -261,14 +300,11 @@ def main():
     parser.add_argument("--workspace", "-w", help="Filter by workspace name")
     parser.add_argument("--ext", "-e", help="Filter by file extension (e.g. .tsx)")
     parser.add_argument("--limit", "-l", type=int, default=5, help="Number of results (default: 5)")
-    parser.add_argument("--collection", "-c", help=f"Qdrant collection name (default: {COLLECTION})")
+    parser.add_argument("--collection", "-c", help=f"Specific collection (default: search ALL collections)")
     parser.add_argument("--no-content", action="store_true", help="Hide content preview")
     parser.add_argument("--dense-only", action="store_true", help="Use dense vector only (no hybrid)")
 
     args = parser.parse_args()
-
-    if args.collection:
-        COLLECTION = args.collection
 
     print(f"🧠 Generating embeddings for: \"{args.query}\"")
 
@@ -276,13 +312,26 @@ def main():
     if filters:
         print(f"🔎 Filters: {json.dumps(filters, indent=2)}")
 
-    if args.dense_only:
-        print("📡 Mode: Dense only (semantic)")
-        vector = get_embedding(args.query)
-        points = dense_only_search(vector, limit=args.limit, filters=filters)
+    if args.collection:
+        # Single collection mode
+        COLLECTION = args.collection
+        print(f"📡 Collection: {COLLECTION}")
+        if args.dense_only:
+            print("📡 Mode: Dense only (semantic)")
+            vector = get_embedding(args.query)
+            points = dense_only_search(vector, limit=args.limit, filters=filters)
+        else:
+            print("📡 Mode: Hybrid (dense + sparse BM25 → RRF fusion)")
+            points = hybrid_search(args.query, limit=args.limit, filters=filters)
     else:
-        print("📡 Mode: Hybrid (dense + sparse BM25 → RRF fusion)")
-        points = hybrid_search(args.query, limit=args.limit, filters=filters)
+        # Multi-collection mode (search ALL)
+        all_colls = get_all_collections()
+        print(f"📡 Mode: Multi-collection search ({', '.join(all_colls)})")
+        if args.dense_only:
+            print("   Strategy: Dense only (semantic)")
+        else:
+            print("   Strategy: Hybrid (dense + sparse BM25 → RRF fusion)")
+        points = multi_collection_search(args.query, limit=args.limit, filters=filters, dense_only=args.dense_only)
 
     print_results(points, show_content=not args.no_content)
 

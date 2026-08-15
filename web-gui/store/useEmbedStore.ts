@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import type { SourceType } from "@/lib/embedding-engine";
 
 export type ConnectionStatus = "idle" | "connected" | "failed" | "testing";
 
@@ -66,10 +65,8 @@ type EmbedStore = {
 
   // Folder
   folderPath: string;
-  sourceType: SourceType;
   includeSubfolders: boolean;
   setFolderPath: (path: string) => void;
-  setSourceType: (type: SourceType) => void;
   setIncludeSubfolders: (include: boolean) => void;
 
   // Scan stats
@@ -144,10 +141,8 @@ export const useEmbedStore = create<EmbedStore>((set) => ({
 
   // Folder
   folderPath: "",
-  sourceType: "workspace",
   includeSubfolders: true,
   setFolderPath: (path) => set({ folderPath: path }),
-  setSourceType: (type) => set({ sourceType: type }),
   setIncludeSubfolders: (include) => set({ includeSubfolders: include }),
 
   // Scan stats

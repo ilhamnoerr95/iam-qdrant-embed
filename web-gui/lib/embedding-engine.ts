@@ -12,7 +12,7 @@ import { readFileSync, readdirSync, statSync } from "fs";
 import { join, extname, relative, basename } from "path";
 import crypto from "crypto";
 
-const INDEXER_VERSION = "2.0.0";
+const INDEXER_VERSION = "2.1.0";
 
 export type EmbeddingProgress = {
   percent: number;
@@ -35,29 +35,35 @@ export type EmbeddingConfig = {
   createNew: boolean;
   vectorSize: number;
   folderPath: string;
-  sourceType: SourceType;
   includeSubfolders: boolean;
   workspace: string;
   project: string;
 };
 
-// Internal extension mapping based on source_type
-const EXTENSIONS_BY_SOURCE_TYPE: Record<SourceType, string[]> = {
-  workspace: [
-    ".ts", ".tsx", ".js", ".jsx", ".mjs", ".py", ".go", ".rs",
-    ".java", ".kt", ".rb", ".php", ".swift", ".c", ".cpp", ".h",
-    ".cs", ".scala", ".sh", ".bash", ".zsh", ".sql", ".graphql",
-    ".html", ".css", ".scss", ".sass", ".less", ".vue", ".svelte",
-    ".yaml", ".yml", ".toml", ".json", ".xml", ".env.example",
-  ],
-  documentation: [
-    ".md", ".mdx", ".txt", ".rst", ".adoc", ".org", ".wiki",
-    ".tex", ".html", ".htm",
-  ],
-};
+// Extension classification — determines source_type per file
+const CODE_EXTENSIONS = new Set([
+  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".py", ".go", ".rs",
+  ".java", ".kt", ".rb", ".php", ".swift", ".c", ".cpp", ".h",
+  ".cs", ".scala", ".sh", ".bash", ".zsh", ".sql", ".graphql",
+  ".html", ".css", ".scss", ".sass", ".less", ".vue", ".svelte",
+  ".yaml", ".yml", ".toml", ".json", ".xml", ".env.example",
+]);
 
-export function getExtensionsForSourceType(sourceType: SourceType): string[] {
-  return EXTENSIONS_BY_SOURCE_TYPE[sourceType];
+const DOC_EXTENSIONS = new Set([
+  ".md", ".mdx", ".txt", ".rst", ".adoc", ".org", ".wiki", ".tex",
+]);
+
+// All supported extensions (code + docs combined)
+const ALL_EXTENSIONS = [...CODE_EXTENSIONS, ...DOC_EXTENSIONS];
+
+export function getAllExtensions(): string[] {
+  return ALL_EXTENSIONS;
+}
+
+// Determine source_type per file based on extension
+function getSourceTypeForFile(ext: string): SourceType {
+  if (DOC_EXTENSIONS.has(ext)) return "documentation";
+  return "workspace";
 }
 
 // Derive content_type from source_type
@@ -499,7 +505,7 @@ export async function startEmbedding(config: EmbeddingConfig): Promise<void> {
   clearLogs();
 
   addLog("info", `Starting embedding — workspace: ${config.workspace}, collection: ${config.collectionName}`);
-  addLog("info", `Model: ${config.model} | Chunk size: ${config.chunkSize} | Source type: ${config.sourceType}`);
+  addLog("info", `Model: ${config.model} | Chunk size: ${config.chunkSize}`);
   addLog("info", `Folder: ${config.folderPath}`);
 
   try {
@@ -515,10 +521,10 @@ export async function startEmbedding(config: EmbeddingConfig): Promise<void> {
       addLog("info", `Collection uses named vectors: "${vectorName}"`);
     }
 
-    // Scan files — extensions determined internally by source_type
+    // Scan files — all supported extensions (code + docs)
     progress.status = "scanning";
     addLog("info", "Scanning files...");
-    const extensions = getExtensionsForSourceType(config.sourceType);
+    const extensions = getAllExtensions();
     const files = scanFiles(config.folderPath, extensions, config.includeSubfolders);
     progress.totalFiles = files.length;
     addLog("info", `Found ${files.length} files to process`);
@@ -594,8 +600,8 @@ export async function startEmbedding(config: EmbeddingConfig): Promise<void> {
                 project: projectName,
                 relative_path: relativePath,
                 extension: ext,
-                source_type: config.sourceType,
-                content_type: getContentType(config.sourceType),
+                source_type: getSourceTypeForFile(ext),
+                content_type: getContentType(getSourceTypeForFile(ext)),
               },
               chunk: {
                 index: ci,

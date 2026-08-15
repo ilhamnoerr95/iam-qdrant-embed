@@ -2,21 +2,16 @@
   "qdrant_url": "http://localhost:6333",
   "ollama_url": "http://localhost:11434",
   "embed_model": "nomic-embed-text:latest",
-  "default_collection": "coba",
+  "default_collection": "cobain",
   "vector_size": 768,
   "collections": [
     {
-      "name": "belajar",
+      "name": "cobain",
       "description": "",
       "vectors": 0
     },
     {
-      "name": "coba",
-      "description": "",
-      "vectors": 0
-    },
-    {
-      "name": "thirdparty",
+      "name": "rag",
       "description": "",
       "vectors": 0
     },
@@ -26,11 +21,5 @@
       "vectors": 1357
     }
   ],
-  "workspace_paths": {
-    "unknown": {
-      "path": "",
-      "collection": "web",
-      "last_indexed": "2026-08-14T08:43:43.747Z"
-    }
-  }
+  "workspace_paths": {}
 }
