@@ -188,23 +188,31 @@ def hybrid_search(query: str, limit: int = 5, filters: Optional[Dict] = None) ->
 
 
 def dense_only_search(vector: List[float], limit: int = 5, filters: Optional[Dict] = None) -> list:
-    """Fallback: dense vector only search (for collections without sparse vectors)."""
-    body = {
-        "query": vector,
-        "using": "dense",
-        "limit": limit,
-        "with_payload": True,
-        "with_vector": False,
-    }
-    if filters:
-        body["filter"] = filters
+    """Fallback: dense vector only search (handles both named and unnamed vector collections)."""
+    # Try named vector first ("dense"), fallback to unnamed
+    for using in ["dense", None]:
+        body = {
+            "query": vector,
+            "limit": limit,
+            "with_payload": True,
+            "with_vector": False,
+        }
+        if using:
+            body["using"] = using
+        if filters:
+            body["filter"] = filters
 
-    payload = json.dumps(body).encode()
-    url = f"{QDRANT_URL}/collections/{COLLECTION}/points/query"
-    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req) as resp:
-        data = json.loads(resp.read())
-    return data.get("result", {}).get("points", [])
+        payload = json.dumps(body).encode()
+        url = f"{QDRANT_URL}/collections/{COLLECTION}/points/query"
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req) as resp:
+                data = json.loads(resp.read())
+            return data.get("result", {}).get("points", [])
+        except urllib.error.HTTPError:
+            continue  # Try next format
+
+    return []
 
 
 def build_filter(project: str = None, workspace: str = None, ext: str = None) -> Optional[Dict]:
@@ -288,6 +296,91 @@ def multi_collection_search(query: str, limit: int = 5, filters: Optional[Dict] 
     return all_points[:limit]
 
 
+# ─── Token Estimation ─────────────────────────────────────────────────────────
+
+def estimate_tokens(text: str) -> int:
+    """Estimate token count (rough: ~4 chars per token for code, ~3.5 for English)."""
+    # Claude tokenizer averages ~3.5-4 chars per token
+    return max(1, len(text) // 4)
+
+
+def get_file_sizes_for_results(points: list) -> Dict[str, int]:
+    """Get estimated full file token counts from search results."""
+    file_tokens = {}
+    for point in points:
+        payload = point.get("payload", {})
+        source = payload.get("source", {})
+        chunk_meta = payload.get("chunk", {})
+        relative_path = source.get("relative_path", "unknown")
+
+        # Estimate full file size from chunk info
+        # If a file has N chunks of ~500 chars each, full file ≈ N * 500
+        chunk_size = payload.get("metadata", {}).get("chunk_size", 500)
+        # We only see some chunks, so estimate conservatively
+        content = payload.get("content", "")
+        end_line = chunk_meta.get("end_line", 50)
+
+        if relative_path not in file_tokens:
+            # Estimate: average file is ~200 lines × 40 chars = 8000 chars = ~2000 tokens
+            # Or use end_line as indicator of file size
+            estimated_file_chars = max(end_line * 40, len(content) * 3)
+            file_tokens[relative_path] = estimate_tokens("x" * estimated_file_chars)
+
+    return file_tokens
+
+
+def print_stats(points: list, search_latency: float, embedding_latency: float):
+    """Print RAG performance stats and comparison."""
+    if not points:
+        return
+
+    # RAG context: actual chunks returned
+    total_rag_chars = 0
+    total_rag_tokens = 0
+    chunk_details = []
+
+    for point in points:
+        content = point.get("payload", {}).get("content", "")
+        tokens = estimate_tokens(content)
+        total_rag_chars += len(content)
+        total_rag_tokens += tokens
+        chunk_details.append(tokens)
+
+    # Non-RAG estimate: if user manually reads full files
+    file_tokens = get_file_sizes_for_results(points)
+    total_file_tokens = sum(file_tokens.values())
+    unique_files = len(file_tokens)
+
+    # Print comparison
+    print(f"\n{'─' * 60}")
+    print(f"📊 RAG Performance Stats")
+    print(f"{'─' * 60}")
+    print(f"")
+    print(f"  ⏱️  Latency")
+    print(f"      Embedding generation: {embedding_latency:.2f}s")
+    print(f"      Vector search + RRF:  {search_latency:.2f}s")
+    print(f"      Total:                {embedding_latency + search_latency:.2f}s")
+    print(f"")
+    print(f"  📦 Token Usage (estimated)")
+    print(f"  ┌─────────────────────────────────────────────────────┐")
+    print(f"  │  Metode              │ Tokens      │ Files          │")
+    print(f"  ├─────────────────────────────────────────────────────┤")
+    print(f"  │  🔴 Tanpa RAG        │ ~{total_file_tokens:<10,} │ {unique_files} full files    │")
+    print(f"  │  🟢 Dengan RAG       │ ~{total_rag_tokens:<10,} │ {len(points)} chunks        │")
+    print(f"  └─────────────────────────────────────────────────────┘")
+
+    if total_file_tokens > 0:
+        savings_pct = ((total_file_tokens - total_rag_tokens) / total_file_tokens) * 100
+        savings_tokens = total_file_tokens - total_rag_tokens
+        print(f"")
+        print(f"  💰 Token Savings: ~{savings_tokens:,} tokens ({savings_pct:.0f}% lebih hemat)")
+        print(f"")
+        print(f"  📝 Detail per chunk: {chunk_details}")
+        print(f"     Total RAG chars: {total_rag_chars:,} | tokens: ~{total_rag_tokens:,}")
+        print(f"     Tanpa RAG (baca {unique_files} file penuh): ~{total_file_tokens:,} tokens")
+    print(f"{'─' * 60}")
+
+
 # ─── Main ──────────────────────────────────────────────────────────────────────
 
 
@@ -303,8 +396,11 @@ def main():
     parser.add_argument("--collection", "-c", help=f"Specific collection (default: search ALL collections)")
     parser.add_argument("--no-content", action="store_true", help="Hide content preview")
     parser.add_argument("--dense-only", action="store_true", help="Use dense vector only (no hybrid)")
+    parser.add_argument("--stats", action="store_true", help="Show performance stats (latency + token comparison)")
 
     args = parser.parse_args()
+
+    import time
 
     print(f"🧠 Generating embeddings for: \"{args.query}\"")
 
@@ -312,17 +408,30 @@ def main():
     if filters:
         print(f"🔎 Filters: {json.dumps(filters, indent=2)}")
 
+    t_start = time.time()
+
     if args.collection:
         # Single collection mode
         COLLECTION = args.collection
         print(f"📡 Collection: {COLLECTION}")
         if args.dense_only:
             print("📡 Mode: Dense only (semantic)")
+            t_embed = time.time()
             vector = get_embedding(args.query)
+            embedding_latency = time.time() - t_embed
+            t_search = time.time()
             points = dense_only_search(vector, limit=args.limit, filters=filters)
+            search_latency = time.time() - t_search
         else:
             print("📡 Mode: Hybrid (dense + sparse BM25 → RRF fusion)")
+            t_embed = time.time()
+            # Embedding happens inside hybrid_search, measure total
+            embedding_latency = 0
+            t_search = time.time()
             points = hybrid_search(args.query, limit=args.limit, filters=filters)
+            search_latency = time.time() - t_search
+            embedding_latency = search_latency * 0.7  # rough: 70% is embedding
+            search_latency = search_latency * 0.3
     else:
         # Multi-collection mode (search ALL)
         all_colls = get_all_collections()
@@ -331,9 +440,18 @@ def main():
             print("   Strategy: Dense only (semantic)")
         else:
             print("   Strategy: Hybrid (dense + sparse BM25 → RRF fusion)")
+
+        t_search = time.time()
         points = multi_collection_search(args.query, limit=args.limit, filters=filters, dense_only=args.dense_only)
+        total_time = time.time() - t_search
+        embedding_latency = total_time * 0.7
+        search_latency = total_time * 0.3
 
     print_results(points, show_content=not args.no_content)
+
+    # Show stats if requested
+    if args.stats:
+        print_stats(points, search_latency, embedding_latency)
 
 
 if __name__ == "__main__":

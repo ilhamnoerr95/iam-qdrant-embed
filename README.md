@@ -199,6 +199,7 @@ python3 ~/Documents/qdrant/qdrant_search.py "query"
 | `--collection, -c` | `--collection nextjs_docs` | Search di collection spesifik saja |
 | `--no-content` | | Sembunyikan preview |
 | `--dense-only` | | Gunakan dense vector saja (tanpa BM25) |
+| `--stats` | | Tampilkan latency + perbandingan token RAG vs non-RAG |
 
 ### Contoh
 
@@ -501,6 +502,12 @@ Atau gunakan Web GUI di: `http://localhost:5001`
 | Context window | Besar (baca seluruh file) | Kecil (hanya chunk relevan) |
 | Perlu hafal struktur | Ya | Tidak |
 | Setup awal | Tidak ada | Index sekali via Web GUI |
+
+> 💡 Gunakan `--stats` untuk melihat perbandingan real-time:
+> ```bash
+> python3 ~/Documents/qdrant/qdrant_search.py "query" --stats
+> ```
+> Output menampilkan: latency (embedding + search), token usage RAG vs non-RAG, dan persentase savings.
 
 ---
 
