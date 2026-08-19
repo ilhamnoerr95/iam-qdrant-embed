@@ -35,10 +35,13 @@ export default function FolderPicker() {
   const [browserOpen, setBrowserOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [showLogs, setShowLogs] = useState(false);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const logCursorRef = useRef(0);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const logsContainerRef = useRef<HTMLDivElement>(null);
+  const isUserScrolledUpRef = useRef(false);
   const prevStatusRef = useRef(progress.status);
 
   // Scan folder for stats + auto-detect source_type
@@ -131,9 +134,28 @@ export default function FolderPicker() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [isRunning, setProgress, setIsRunning]);
 
-  // Auto-scroll logs
-  useEffect(() => {
+  // Track if user scrolled up (away from bottom)
+  const handleLogsScroll = useCallback(() => {
+    const container = logsContainerRef.current;
+    if (!container) return;
+    // Consider "at bottom" if within 40px of the bottom edge
+    const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 40;
+    isUserScrolledUpRef.current = !atBottom;
+    setShowScrollBtn(!atBottom);
+  }, []);
+
+  // Scroll to bottom helper
+  const scrollToBottom = useCallback(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    isUserScrolledUpRef.current = false;
+    setShowScrollBtn(false);
+  }, []);
+
+  // Auto-scroll logs only when user is at bottom (not scrolled up)
+  useEffect(() => {
+    if (!isUserScrolledUpRef.current) {
+      logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [logs]);
 
   // Start embedding
@@ -375,15 +397,33 @@ export default function FolderPicker() {
               </button>
             </div>
           </div>
-          <div className="max-h-56 overflow-y-auto bg-[#0d1117] px-4 py-2 font-mono text-[11px] leading-5">
-            {logs.map((log, i) => (
-              <div key={i} className={`flex gap-2 ${logLevelColor(log.level)}`}>
-                <span className="shrink-0 text-text-muted/50">{formatTime(log.timestamp)}</span>
-                <span className="shrink-0 w-3 text-center">{logLevelIcon(log.level)}</span>
-                <span className="break-all">{log.message}</span>
-              </div>
-            ))}
-            <div ref={logsEndRef} />
+          <div className="relative">
+            <div
+              ref={logsContainerRef}
+              onScroll={handleLogsScroll}
+              className="max-h-56 overflow-y-auto bg-[#0d1117] px-4 py-2 font-mono text-[11px] leading-5"
+            >
+              {logs.map((log, i) => (
+                <div key={i} className={`flex gap-2 ${logLevelColor(log.level)}`}>
+                  <span className="shrink-0 text-text-muted/50">{formatTime(log.timestamp)}</span>
+                  <span className="shrink-0 w-3 text-center">{logLevelIcon(log.level)}</span>
+                  <span className="break-all">{log.message}</span>
+                </div>
+              ))}
+              <div ref={logsEndRef} />
+            </div>
+            {/* Scroll to bottom button — appears when user scrolls up */}
+            {showScrollBtn && isRunning && (
+              <button
+                onClick={scrollToBottom}
+                className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full bg-accent/90 px-3 py-1.5 text-[10px] font-medium text-white shadow-lg transition-all hover:bg-accent"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+                Latest
+              </button>
+            )}
           </div>
         </div>
       )}
